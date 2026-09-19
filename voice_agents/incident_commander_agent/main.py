@@ -8,6 +8,7 @@ incident action summary when the session ends.
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -97,6 +98,9 @@ class IncidentState:
     action_items: list = field(default_factory=list)
     escalation: Optional[dict] = None
     transcript: list = field(default_factory=list)
+    # Unique per session, so concurrent sessions never overwrite each other's logs.
+    session_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    started_stamp: str = field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
 
     def __post_init__(self) -> None:
         self.status = self.incident["status"]
@@ -143,8 +147,7 @@ class IncidentState:
 def save_logs(state: IncidentState) -> Path:
     """Write the transcript and the structured summary to the logs/ folder."""
     LOG_DIR.mkdir(exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    prefix = f"{state.incident['id']}_{stamp}"
+    prefix = f"{state.incident['id']}_{state.started_stamp}_{state.session_id}"
     (LOG_DIR / f"{prefix}_transcript.json").write_text(json.dumps(state.transcript, indent=2))
     summary_path = LOG_DIR / f"{prefix}_summary.json"
     summary_path.write_text(json.dumps(state.summary(), indent=2))
